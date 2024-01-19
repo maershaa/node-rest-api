@@ -1,9 +1,17 @@
-const { User } = require("../models/user");
-const { schemas } = require("../models/user");
-const bcrypt = require("bcrypt");
-const { HttpError } = require("../helpers/index");
-const jwt = require("jsonwebtoken");
-require("dotenv").config();
+// Подключение модулей и зависимостей
+const { User } = require("../models/user"); // Подключение модели пользователя
+const { schemas } = require("../models/user"); // Подключение схемы данных пользователя
+const bcrypt = require("bcrypt"); // Подключение библиотеки для хеширования паролей
+const { HttpError } = require("../helpers/index"); // Подключение кастомного класса для обработки ошибок
+const jwt = require("jsonwebtoken"); // Подключение библиотеки для работы с JSON Web Tokens
+require("dotenv").config(); // Загрузка переменных окружения
+const fs = require("node:fs/promises"); // Подключение модуля для работы с файловой системой
+const gravatar = require("gravatar"); // Подключение библиотеки для работы с Gravatar-изображениями
+const path = require("path"); // Подключение модуля path для работы с путями в файловой системе
+var Jimp = require("jimp");
+
+
+
 
 const register = async (req, res, next) => {
   try {
@@ -12,7 +20,6 @@ const register = async (req, res, next) => {
     if (error) {
       throw HttpError(400, error.message);
     }
-
 
     // Проверка существующего пользователя на то существует ли уже пользователь с таким адресом электронной почты
     const { email, password } = req.body;
@@ -25,16 +32,23 @@ const register = async (req, res, next) => {
     // Хеширование пароля с использованием bcrypt и добавлением соли (10 = cоль то есть сколько раз будет выполняться процесс хеширования (раунды))
     const hashPassword = await bcrypt.hash(password, 10);
 
-    // Создание нового пользователя с захешированным паролем
-    const newUser = await User.create({ ...req.body, password: hashPassword });
-    
+    // Получение URL Gravatar-изображения на основе email пользователя
+    const avatarURL = gravatar.url(email);
+
+    // Создание нового пользователя в базе данных с хешированным паролем и URL Gravatar-изображения
+    // Когда чнловек будет регистрирвоаться ему будет предоставляться временная аватарка
+    const newUser = await User.create({
+      ...req.body,
+      password: hashPassword,
+      avatarURL,
+    });
+
     res.status(201).json({
       user: {
         email: newUser.email,
         subscription: newUser.subscription,
-      }
+      },
     });
-    
   } catch (error) {
     next(error);
   }
@@ -84,9 +98,8 @@ const login = async (req, res, next) => {
       user: {
         email: user.email,
         subscription: user.subscription,
-      }
+      },
     });
-    
   } catch (error) {
     // Передача ошибки следующему обработчику
     next(error);
@@ -99,8 +112,6 @@ const getCurrent = async (req, res, next) => {
     // Извлечение email и name из объекта пользователя в запросе
     const { email, name } = req.user;
 
-
-
     // Отправка JSON-ответа с информацией о текущем пользователе
     res.json({
       name,
@@ -111,50 +122,92 @@ const getCurrent = async (req, res, next) => {
   }
 };
 
-
-const logout= async (req, res, next) => {
+const logout = async (req, res, next) => {
   try {
-    const {_id} = req.user
-    await User.findByIdAndUpdate(_id, { token :""});
+    const { _id } = req.user;
+    await User.findByIdAndUpdate(_id, { token: "" });
 
-res.status(201).json({
-  message: "No Content", 
-})
+    res.status(201).json({
+      message: "No Content",
+    });
   } catch (error) {
     next(error);
-
   }
-}
+};
 
 const updateSubscription = async (req, res, next) => {
   try {
-    const {_id} = req.user
+    const { _id } = req.user;
     const { subscription } = req.body;
 
     // Проверка, что подписка установлена в одно из допустимых значений
-    const validSubscriptions = ['starter', 'pro', 'business'];
+    const validSubscriptions = ["starter", "pro", "business"];
     if (!validSubscriptions.includes(subscription)) {
-      throw HttpError(400, "Invalid subscription value. Subscription must have one of the following values: ['starter', 'pro', 'business']");
+      throw HttpError(
+        400,
+        "Invalid subscription value. Subscription must have one of the following values: ['starter', 'pro', 'business']"
+      );
     }
- 
+
     // Обновление подписки пользователя в базе данных
-    const updatedUser = await User.findByIdAndUpdate(_id, { subscription }, { new: true });
+    const updatedUser = await User.findByIdAndUpdate(
+      _id,
+      { subscription },
+      { new: true }
+    );
 
     if (!updatedUser) {
       throw HttpError(404, "User not found");
     }
 
-        // Отправляем обновленного пользователя в ответ
-        res.status(200).json({
-            email: updatedUser.email,
-            subscription: updatedUser.subscription,
-        });
-        
-
+    // Отправляем обновленного пользователя в ответ
+    res.status(200).json({
+      email: updatedUser.email,
+      subscription: updatedUser.subscription,
+    });
   } catch (error) {
     next(error);
   }
-}
+};
+
+// !!! Напистаь  надо!!
+const updateAvatar = async (req, res, next) => {
+  try {
+    const avatarDir = path.join(__dirname, "../", "public", "avatars"); //путь к папке с аватрками
+    // Извлечение идентификатора пользователя из объекта запроса
+    const { _id } = req.user;
+    // Извлечение информации о загруженном файле из объекта запроса
+    const { path: tempUpload, originalname } = req.file;
+
+    // Для избежания перезаписи файлов с одинаковыми именами, мы генерируем уникальное имя файла,
+    // добавляя идентификатор пользователя к оригинальному имени файла.
+    const filename = `${_id}_${originalname}`;
+
+    // Полный путь к месту, куда будет перемещен загруженный аватар пользователя
+    const resultUpload = path.join(avatarDir, filename);
+
+    // Перемещение файла из временной папки в целевую папку (аватар пользователя)
+    await fs.rename(tempUpload, resultUpload);
+
+    // Формирование URL для нового аватара пользователя
+    const avatarURL = path.join("avatars", filename);
+
+
+
+
+    // Обновление записи пользователя в базе данных с новым URL аватара
+    await User.findByIdAndUpdate(_id, { avatarURL });
+
+    // Отправка успешного ответа с URL нового аватара пользователя
+    res.json({
+      avatarURL,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 
 
 module.exports = {
@@ -162,5 +215,6 @@ module.exports = {
   login,
   getCurrent,
   logout,
-  updateSubscription
+  updateSubscription,
+  updateAvatar,
 };
