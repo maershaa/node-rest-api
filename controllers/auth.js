@@ -1,4 +1,3 @@
-// Подключение модулей и зависимостей
 const { User } = require("../models/user"); // Подключение модели пользователя
 const { schemas } = require("../models/user"); // Подключение схемы данных пользователя
 const bcrypt = require("bcrypt"); // Подключение библиотеки для хеширования паролей
@@ -8,10 +7,26 @@ require("dotenv").config(); // Загрузка переменных окруж�
 const fs = require("node:fs/promises"); // Подключение модуля для работы с файловой системой
 const gravatar = require("gravatar"); // Подключение библиотеки для работы с Gravatar-изображениями
 const path = require("path"); // Подключение модуля path для работы с путями в файловой системе
-var Jimp = require("jimp");
+const Jimp = require("jimp"); // Подключение библиотеки Jimp для обработки изображений
 
 
-
+//! Функция для обработки изображения с использованием Jimp
+const processAvatar = async (avatarPath, options) => {
+  return new Promise((resolve, reject) => {
+    Jimp.read(avatarPath, (err, avatar) => {
+      if (err) return reject(err);
+      const width = 250;
+      const height = 250;
+      avatar.resize(width, height);
+      avatar.circle(); // Делаем изображение круглым
+      // Сохранение измененного изображения
+      avatar.write(avatarPath, (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  });
+};
 
 const register = async (req, res, next) => {
   try {
@@ -34,6 +49,8 @@ const register = async (req, res, next) => {
 
     // Получение URL Gravatar-изображения на основе email пользователя
     const avatarURL = gravatar.url(email);
+    // Обработка аватара
+    await processAvatar(avatarURL);
 
     // Создание нового пользователя в базе данных с хешированным паролем и URL Gravatar-изображения
     // Когда чнловек будет регистрирвоаться ему будет предоставляться временная аватарка
@@ -106,6 +123,7 @@ const login = async (req, res, next) => {
   }
 };
 
+
 // Получение информации о текущем пользователе
 const getCurrent = async (req, res, next) => {
   try {
@@ -170,7 +188,6 @@ const updateSubscription = async (req, res, next) => {
   }
 };
 
-// !!! Напистаь  надо!!
 const updateAvatar = async (req, res, next) => {
   try {
     const avatarDir = path.join(__dirname, "../", "public", "avatars"); //путь к папке с аватрками
@@ -192,8 +209,9 @@ const updateAvatar = async (req, res, next) => {
     // Формирование URL для нового аватара пользователя
     const avatarURL = path.join("avatars", filename);
 
-
-
+    // Обработка аватара с использованием Jimp
+    await processAvatar(resultUpload);
+    console.log("processAvatar", processAvatar);
 
     // Обновление записи пользователя в базе данных с новым URL аватара
     await User.findByIdAndUpdate(_id, { avatarURL });
@@ -206,9 +224,6 @@ const updateAvatar = async (req, res, next) => {
     next(error);
   }
 };
-
-
-
 
 module.exports = {
   register,
