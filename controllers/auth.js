@@ -1,32 +1,14 @@
 const { User } = require("../models/user"); // Подключение модели пользователя
 const { schemas } = require("../models/user"); // Подключение схемы данных пользователя
 const bcrypt = require("bcrypt"); // Подключение библиотеки для хеширования паролей
-const { HttpError } = require("../helpers/index"); // Подключение кастомного класса для обработки ошибок
+const { HttpError, modifyAvatar } = require("../helpers/index"); // Подключение кастомного класса для обработки ошибок и изменения аватара
 const jwt = require("jsonwebtoken"); // Подключение библиотеки для работы с JSON Web Tokens
 require("dotenv").config(); // Загрузка переменных окружения
 const fs = require("node:fs/promises"); // Подключение модуля для работы с файловой системой
 const gravatar = require("gravatar"); // Подключение библиотеки для работы с Gravatar-изображениями
 const path = require("path"); // Подключение модуля path для работы с путями в файловой системе
-const Jimp = require("jimp"); // Подключение библиотеки Jimp для обработки изображений
 
 
-//! Функция для обработки изображения с использованием Jimp
-const processAvatar = async (avatarPath, options) => {
-  return new Promise((resolve, reject) => {
-    Jimp.read(avatarPath, (err, avatar) => {
-      if (err) return reject(err);
-      const width = 250;
-      const height = 250;
-      avatar.resize(width, height);
-      avatar.circle(); // Делаем изображение круглым
-      // Сохранение измененного изображения
-      avatar.write(avatarPath, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
-  });
-};
 
 const register = async (req, res, next) => {
   try {
@@ -49,8 +31,10 @@ const register = async (req, res, next) => {
 
     // Получение URL Gravatar-изображения на основе email пользователя
     const avatarURL = gravatar.url(email);
-    // Обработка аватара
-    await processAvatar(avatarURL);
+    console.log(avatarURL)
+
+    // !Обработка аватара которую по сути мы сделать не можем
+    // await modifyAvatar(avatarURL);
 
     // Создание нового пользователя в базе данных с хешированным паролем и URL Gravatar-изображения
     // Когда чнловек будет регистрирвоаться ему будет предоставляться временная аватарка
@@ -210,8 +194,8 @@ const updateAvatar = async (req, res, next) => {
     const avatarURL = path.join("avatars", filename);
 
     // Обработка аватара с использованием Jimp
-    await processAvatar(resultUpload);
-    console.log("processAvatar", processAvatar);
+    await modifyAvatar(resultUpload);
+    console.log("modifyAvatar", modifyAvatar);
 
     // Обновление записи пользователя в базе данных с новым URL аватара
     await User.findByIdAndUpdate(_id, { avatarURL });
