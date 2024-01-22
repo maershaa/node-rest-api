@@ -6,7 +6,7 @@ describe("Login Controller Test", () => {
   test("должен возвращать статус код 200, токен и объект пользователя с полями email и subscription", async (done) => {
     try {
       const response = await request(app.login)
-        .post("/login")
+        .post("/login")  //!или /api/users/login? но не помогло
         .send({ email: "lera123@example.com", password: "lera123" });
       expect(response.status).toBe(200);
 
