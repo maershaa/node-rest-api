@@ -5,8 +5,9 @@ const app = require("./auth");
 describe("Login Controller Test", () => {
   test("должен возвращать статус код 200, токен и объект пользователя с полями email и subscription", async (done) => {
     try {
-      const response = await request(app.login)
-        .post("/login")  //!или /api/users/login? но не помогло
+      const response = await request(app)
+        .post("/api/users/login") 
+        .set("Content-Type", "application/json") 
         .send({ email: "lera123@example.com", password: "lera123" });
       expect(response.status).toBe(200);
 
@@ -27,8 +28,9 @@ describe("Login Controller Test", () => {
 
   test("должен возвращать статус код 400 для некорректных данных", async (done) => {
     try {
-      const response = await request(app.login)
-        .post("/login")
+      const response = await request(app)
+        .post("/api/users/login")  
+        .set("Content-Type", "application/json") 
         .send({ email: "inval555!!!idemail", password: "1234" });
 
       expect(response.status).toBe(400);
@@ -40,10 +42,12 @@ describe("Login Controller Test", () => {
 
   test("должен возвращать статус код 401 для несуществующего пользователя", async (done) => {
     try {
-      const response = await request(app.login).post("/login").send({
-        email: "nonexistent@example.com",
-        password: "nonexistentpassword",
-      });
+      const response = await request(app)
+        .post("/api/users/login") 
+        .send({
+          email: "nonexistent@example.com",
+          password: "nonexistentpassword",
+        });
 
       expect(response.status).toBe(401);
       done();
@@ -54,8 +58,9 @@ describe("Login Controller Test", () => {
 
   test("должен возвращать статус код 401 для неверного пароля", async (done) => {
     try {
-      const response = await request(app.login)
-        .post("/login")
+      const response = await request(app)
+        .post("/api/users/login")  
+        .set("Content-Type", "application/json") 
         .send({ email: "lera123@example.com", password: "incorrectpassword" });
 
       expect(response.status).toBe(401);
