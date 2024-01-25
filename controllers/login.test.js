@@ -59,8 +59,8 @@ describe("Test login controller", () => {
   // Шаг 2: Очистка данных после выполнения всех тестов
   afterAll(async () => {
     try {
-      // Удаление всех пользователей из базы данных
-      await User.deleteMany({});
+      // Удаление всех пользователей с заданым email из базы данных
+      await User.deleteMany({ email: "lera12345@example.com" });
       // Закрытие тестового сервера
       await server.close();
       // Отключение от базы данных
