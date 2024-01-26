@@ -38,8 +38,7 @@ describe("Test login controller", () => {
       // Запуск тестового сервера
       server = app.listen();
       // Подключение к базе данных
-      await mongoose.connect(DB_HOST, {
-      });
+      await mongoose.connect(DB_HOST);
       // Регистрация тестового пользователя
       await request(app).post("/api/users/register").send(newUser);
       // Выполнение успешного логина
