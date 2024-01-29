@@ -34,6 +34,14 @@ const userSchema = new Schema(
       type: String,
       required: true,
   },
+    verify: {
+      type: Boolean,
+      default: false,
+    },
+    verificationToken: {
+      type: String,
+      required: [true, 'Verify token is required'],
+    },
   },
   {
     versionKey: false, // исключит автоматическое добавление поля __v
@@ -52,6 +60,10 @@ const registerSchema = Joi.object({
     .default("starter"), //(распыление) используется для передачи элементов массива subscriptionRegex в качестве отдельных аргументов методу .valid()
 });
 
+const emailSchema = Joi.object({
+  email: Joi.string().pattern(emailRegex).required(),
+});
+
 const loginSchema = Joi.object({
   email: Joi.string().pattern(emailRegex).required(),
   password: Joi.string().min(6).required(),
@@ -61,6 +73,7 @@ const User = model("user", userSchema); // модель
 
 const schemas = {
   registerSchema,
+  emailSchema,
   loginSchema,
 };
 
