@@ -10,6 +10,8 @@ const path = require("node:path"); // Подключение модуля path �
 const crypto = require("node:crypto");
 const { BASE_URL } = process.env;
 
+
+
 const register = async (req, res, next) => {
   try {
     // если данные не соответствуют ожидаемой схеме, будет выброшена ошибка HTTP 400 с соответствующим сообщением
@@ -50,6 +52,7 @@ const register = async (req, res, next) => {
       to: newUser.email, // Адрес электронной почты нового пользователя
       subject: "Verify email", // Тема письма
       html: `<a target="_blank" href="${BASE_URL}/api/users/verify/${verificationToken}">Click verification email</a>`, // HTML-содержимое письма с ссылкой на верификацию
+      text: `To confirm your registration please open the link http://${BASE_URL}/api/users/verify/${verificationToken}`,
     };
     // Отправка электронного письма
     await sendEmail(verifyEmail);
