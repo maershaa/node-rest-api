@@ -11,6 +11,11 @@ router.post("/register", ctrl.register);
 // можно еще назвать signim
 router.post("/login", ctrl.login);
 
+router.get("/verify/:verificationToken",  ctrl.verifyEmail); //маршрут для проверки верификации email.
+
+router.post("/verify",  ctrl.resendVerifyEmail); //маршрут если письмо с подтверждением почты не пришло пользователю
+
+
 router.get("/current", authenticate, ctrl.getCurrent);
 
 router.post("/logout", authenticate, ctrl.logout);

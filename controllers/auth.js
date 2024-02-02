@@ -1,12 +1,14 @@
 const { User } = require("../models/user"); // Подключение модели пользователя
 const { schemas } = require("../models/user"); // Подключение схемы данных пользователя
 const bcrypt = require("bcrypt"); // Подключение библиотеки для хеширования паролей
-const { HttpError, modifyAvatar } = require("../helpers/index"); // Подключение кастомного класса для обработки ошибок и изменения аватара
+const { HttpError, modifyAvatar, sendEmail } = require("../helpers/index"); // Подключение кастомного класса для обработки ошибок и изменения аватара
 const jwt = require("jsonwebtoken"); // Подключение библиотеки для работы с JSON Web Tokens
 require("dotenv").config(); // Загрузка переменных окружения
 const fs = require("node:fs/promises"); // Подключение модуля для работы с файловой системой
 const gravatar = require("gravatar"); // Подключение библиотеки для работы с Gravatar-изображениями
 const path = require("node:path"); // Подключение модуля path для работы с путями в файловой системе
+const crypto = require("node:crypto");
+const { BASE_URL } = process.env;
 
 
 
@@ -31,15 +33,29 @@ const register = async (req, res, next) => {
 
     // Получение URL Gravatar-изображения на основе email пользователя
     const avatarURL = gravatar.url(email);
-    console.log(avatarURL)
+    console.log(avatarURL);
+
+    // Генерация уникального токена для верификации
+    const verificationToken = crypto.randomUUID();
 
     // Создание нового пользователя в базе данных с хешированным паролем и URL Gravatar-изображения
-    // Когда чнловек будет регистрирвоаться ему будет предоставляться временная аватарка
+    // Когда человек будет регистрироваться, ему будет предоставлена временная аватарка
     const newUser = await User.create({
       ...req.body,
-      password: hashPassword,
-      avatarURL,
+      password: hashPassword, // Хешированный пароль
+      avatarURL, // URL Gravatar-изображения
+      verificationToken, // Уникальный токен верификации
     });
+
+    // Подготовка и отправка электронного письма с ссылкой на верификацию
+    const verifyEmail = {
+      to: newUser.email, // Адрес электронной почты нового пользователя
+      subject: "Verify email", // Тема письма
+      html: `<a target="_blank" href="${BASE_URL}/api/users/verify/${verificationToken}">Click verification email</a>`, // HTML-содержимое письма с ссылкой на верификацию
+      text: `To confirm your registration please open the link http://${BASE_URL}/api/users/verify/${verificationToken}`,
+    };
+    // Отправка электронного письма
+    await sendEmail(verifyEmail);
 
     res.status(201).json({
       user: {
@@ -48,7 +64,86 @@ const register = async (req, res, next) => {
       },
     });
   } catch (error) {
-    console.log(error)
+    console.log(error);
+    next(error);
+  }
+};
+
+const verifyEmail = async (req, res, next) => {
+  try {
+    // Извлечение токена верификации из параметра запроса
+    const { verificationToken } = req.params;
+
+    // Поиск пользователя в базе данных по токену верификации
+    const user = await User.findOne({ verificationToken });
+    // Проверка, существует ли пользователь с указанным токеном
+    if (!user) {
+      // Если пользователь не найден, выбросить ошибку 404 с сообщением
+      throw HttpError(404, "User not found ");
+    }
+
+    // Обновление данных пользователя: установка флага верификации в true и очистка токена верификации
+    await User.findByIdAndUpdate(user._id, {
+      verify: true,
+      verificationToken: null,
+    });
+
+    // Отправка ответа, что верификация прошла успешно
+    res.status(200).json({ message: "Verification successful" });
+
+  } catch (error) {
+    // Вывод сообщения об ошибке в консоль
+    console.log(error.message);
+    // Передача ошибки следующему обработчику
+    next(error);
+  }
+};
+
+const resendVerifyEmail = async (req, res, next) => {
+  try {
+    // Проверка соответствия данных ожидаемой схеме; если не соответствует, выбрасываем ошибку HTTP 400
+    const { error } = schemas.emailSchema.validate(req.body);
+    if (error) {
+      throw HttpError(400, "Missing required field email");
+    }
+
+    // Извлечение адреса электронной почты из тела запроса
+    const { email } = req.body;
+
+    // Поиск пользователя в базе данных по адресу электронной почты
+    const user = await User.findOne({ email });
+
+    // Проверка наличия пользователя с указанным адресом электронной почты
+    if (!user) {
+      // Если пользователь не найден, генерируем ошибку HTTP 401 с сообщением
+      throw HttpError(401, "Email not found");
+    }
+
+    // Проверка, подтвержден ли уже адрес электронной почты
+    if (user.verify) {
+      // Если адрес электронной почты уже подтвержден, генерируем ошибку HTTP 401 с сообщением
+      throw HttpError(400, "Verification has already been passed");
+    }
+
+    // Подготовка и отправка ПОВТОРНОГО электронного письма с ссылкой на верификацию
+    const verifyEmail = {
+      to: user.email, // Адрес электронной почты пользователя
+      subject: "Verify email", // Тема письма
+      html: `<a target="_blank" href="${BASE_URL}/api/users/verify/${user.verificationToken}">Click verification email</a>`, // HTML-содержимое письма с ссылкой на верификацию
+    };
+
+    // Отправка электронного письма
+    await sendEmail(verifyEmail);
+
+    // Отправка успешного ответа, если все прошло без ошибок
+    res.status(200).json({
+      message: "Verification email sent",
+    });
+
+  } catch (error) {
+    // Вывод сообщения об ошибке в консоль
+    console.log(error.message);
+    // Передача ошибки следующему обработчику
     next(error);
   }
 };
@@ -70,6 +165,11 @@ const login = async (req, res, next) => {
     // Проверка наличия пользователя
     if (!user) {
       throw HttpError(401, "Email or password is wrong");
+    }
+
+    // Проверка на то, прошел ли пользователь верификацию по электронной почте.
+    if (user.verify === false) {
+      throw HttpError(404, "Email not verified");
     }
 
     // Сравнение введенного пароля с хешем пароля в базе данных
@@ -100,12 +200,11 @@ const login = async (req, res, next) => {
       },
     });
   } catch (error) {
-    console.log(error.message)
+    console.log(error.message);
     // Передача ошибки следующему обработчику
     next(error);
   }
 };
-
 
 // Получение информации о текущем пользователе
 const getCurrent = async (req, res, next) => {
@@ -179,8 +278,8 @@ const updateAvatar = async (req, res, next) => {
     const { _id } = req.user;
     // Извлечение информации о загруженном файле из объекта запроса
     const { path: tempUpload, originalname, filename } = req.file;
-    console.log('filename', filename)
-/* 
+    console.log("filename", filename);
+    /* 
     !Для избежания перезаписи файлов с одинаковыми именами, мы генерируем уникальное имя файла, добавляя идентификатор пользователя к оригинальному имени файла. Однако в данном случае это нецелесообразно так как мидлвара upload в себе уже реализовывает это
     const filename = `${_id}_${originalname}`; */
 
@@ -211,6 +310,8 @@ const updateAvatar = async (req, res, next) => {
 
 module.exports = {
   register,
+  verifyEmail,
+  resendVerifyEmail,
   login,
   getCurrent,
   logout,
